@@ -1,0 +1,11 @@
+[build]
+  command = "pip install -r requirements.txt"
+  publish = "_site"
+
+[functions]
+  external_node_modules = ["python-multipart"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/main/{splat}"
+  status = 200
