@@ -143,7 +143,7 @@ def get_methodology_explanation(logs, stats_res):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"Yapay zeka yorumu alinirken hata olustu: {str(e)}"varsa)
+return f"Yapay zeka yorumu alinirken hata olustu: {str(e)}"
     extra_stats = ""
     if df is not None:
         try:
