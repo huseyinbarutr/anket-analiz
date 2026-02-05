@@ -167,46 +167,114 @@ async def graph_simple_boxplot(file: UploadFile = File(...)):
     except Exception as e: return {"Hata": str(e)}
 
 # ==========================================================
-# 🧠 SMART AUTO (Yapay Zeka Bölümü)
+# 🧠 SMART AUTO (Yapay Zeka Bölümü) - TÜM TESTLERİ YAPAR
 # ==========================================================
-def decide_and_analyze(df):
-    logs = []
+
+def run_all_tests(df):
+    """Tüm istatistiksel testleri çalıştırır ve sonuçları döndürür"""
+    results = {}
     cols = df.columns
     has_pre_post = 'on_test' in cols and 'son_test' in cols
     has_group = 'grup' in cols
-    logs.append("1. Veri seti tarandi.")
+    num_cols = [c for c in cols if pd.api.types.is_numeric_dtype(df[c])]
     
-    # 1. Senaryo: Mixed ANOVA (Grup + Zaman)
-    if has_group and has_pre_post:
-        logs.append("2. Karma Desen (Grup + Zaman) tespit edildi.")
-        logs.append("3. Karar: 'Mixed ANOVA' testi secildi.")
+    # 1. TANIMLAYICI İSTATİSTİKLER
+    desc_stats = {}
+    for col in num_cols:
+        desc_stats[col] = {
+            "N": int(df[col].count()),
+            "Ortalama": round(df[col].mean(), 3),
+            "Std Sapma": round(df[col].std(), 3),
+            "Min": round(df[col].min(), 3),
+            "Max": round(df[col].max(), 3),
+            "Medyan": round(df[col].median(), 3)
+        }
+    results["tanimlayici"] = desc_stats
+    
+    # 2. NORMALLİK TESTLERİ
+    normality = {}
+    for col in num_cols:
         try:
-            df['id'] = range(len(df))
-            df_long = pd.melt(df, id_vars=['id', 'grup'], value_vars=['on_test', 'son_test'], var_name='zaman', value_name='puan')
-            aov = pg.mixed_anova(dv='puan', within='zaman', between='grup', subject='id', data=df_long)
-            return {"p": aov.iloc[0]['p-unc'], "test": "Mixed ANOVA"}, logs
+            stat, p = stats.shapiro(df[col].dropna())
+            normality[col] = {"Shapiro-W": round(stat, 4), "p": round(p, 4), "Normal": "Evet" if p > 0.05 else "Hayir"}
         except: pass
-
-    # 2. Senaryo: T-Testi (Sadece Zaman)
-    if has_pre_post:
-        logs.append("2. Sadece Zaman degisimi (On-Son) tespit edildi.")
-        diff = df['son_test'] - df['on_test']
-        if stats.shapiro(diff).pvalue > 0.05:
-            logs.append("3. Veri Normal. Karar: 'Paired T-Test'.")
-            res = pg.ttest(df['on_test'], df['son_test'], paired=True)
-            test_name = "Paired T-Test"
-        else:
-            logs.append("3. Veri Normal Degil. Karar: 'Wilcoxon'.")
-            res = pg.wilcoxon(df['on_test'], df['son_test'])
-            test_name = "Wilcoxon"
-        return {"p": res['p-val'].values[0], "test": test_name}, logs
+    results["normallik"] = normality
     
-    return None, ["Veri yapisi Smart Auto icin uygun degil. Lutfen Manuel Testleri kullanin."]
+    # 3. T-TESTLERİ
+    if has_pre_post:
+        # Paired T-Test
+        try:
+            paired_res = pg.ttest(df['on_test'], df['son_test'], paired=True)
+            results["paired_ttest"] = {
+                "T": round(paired_res['T'].values[0], 4),
+                "p": round(paired_res['p-val'].values[0], 5),
+                "Cohen-d": round(paired_res['cohen-d'].values[0], 4),
+                "Sonuc": "Anlamli" if paired_res['p-val'].values[0] < 0.05 else "Anlamli Degil"
+            }
+        except: pass
+        
+        # Wilcoxon (non-parametric)
+        try:
+            wilc_res = pg.wilcoxon(df['on_test'], df['son_test'])
+            results["wilcoxon"] = {
+                "W": round(wilc_res['W-val'].values[0], 4),
+                "p": round(wilc_res['p-val'].values[0], 5),
+                "Sonuc": "Anlamli" if wilc_res['p-val'].values[0] < 0.05 else "Anlamli Degil"
+            }
+        except: pass
+    
+    # 4. GRUPLAR ARASI T-TEST
+    if has_group and len(df['grup'].unique()) == 2:
+        groups = df['grup'].unique()
+        for col in num_cols:
+            try:
+                g1 = df[df['grup'] == groups[0]][col]
+                g2 = df[df['grup'] == groups[1]][col]
+                ind_res = pg.ttest(g1, g2, paired=False)
+                results[f"independent_ttest_{col}"] = {
+                    "Gruplar": f"{groups[0]} vs {groups[1]}",
+                    "Degisken": col,
+                    "T": round(ind_res['T'].values[0], 4),
+                    "p": round(ind_res['p-val'].values[0], 5),
+                    "Cohen-d": round(ind_res['cohen-d'].values[0], 4),
+                    "Sonuc": "Anlamli" if ind_res['p-val'].values[0] < 0.05 else "Anlamli Degil"
+                }
+            except: pass
+    
+    # 5. MIXED ANOVA
+    if has_group and has_pre_post:
+        try:
+            df_copy = df.copy()
+            df_copy['id'] = range(len(df_copy))
+            df_long = pd.melt(df_copy, id_vars=['id', 'grup'], value_vars=['on_test', 'son_test'], var_name='zaman', value_name='puan')
+            aov = pg.mixed_anova(dv='puan', within='zaman', between='grup', subject='id', data=df_long)
+            results["mixed_anova"] = {
+                "Zaman_F": round(aov[aov['Source'] == 'zaman']['F'].values[0], 4),
+                "Zaman_p": round(aov[aov['Source'] == 'zaman']['p-unc'].values[0], 5),
+                "Grup_F": round(aov[aov['Source'] == 'grup']['F'].values[0], 4),
+                "Grup_p": round(aov[aov['Source'] == 'grup']['p-unc'].values[0], 5),
+                "Etkilesim_F": round(aov[aov['Source'] == 'Interaction']['F'].values[0], 4),
+                "Etkilesim_p": round(aov[aov['Source'] == 'Interaction']['p-unc'].values[0], 5)
+            }
+        except: pass
+    
+    # 6. KORELASYON
+    if len(num_cols) >= 2:
+        try:
+            corr_matrix = df[num_cols].corr()
+            results["korelasyon"] = corr_matrix.round(4).to_dict()
+        except: pass
+    
+    return results
 
-def get_methodology_explanation(logs, stats_res):
+def get_ai_interpretation(all_results):
+    """AI ile tüm sonuçları yorumla"""
     if not os.getenv("GOOGLE_API_KEY"):
         return "Yapay Zeka Anahtari girilmedigi icin otomatik yorum yapilamadi."
-    prompt = f"Sen bir istatistikçisin. Analiz Logları: {logs}. Sonuç: {stats_res}. Buna göre 1 paragraf akademik yorum yaz."
+    prompt = f"""Sen bir istatistik uzmanısın. Aşağıdaki analiz sonuçlarını Türkçe olarak akademik bir dille yorumla. 
+Her test için ayrı ayrı yorum yap ve sonuçların ne anlama geldiğini açıkla.
+Sonuçlar: {all_results}
+Lütfen 3-4 paragraf halinde kapsamlı bir yorum yaz."""
     try:
         model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
@@ -217,37 +285,109 @@ def get_methodology_explanation(logs, stats_res):
 async def smart_auto_analysis(file: UploadFile = File(...)):
     try:
         df = read_file(await file.read())
-        stats_res, logs = decide_and_analyze(df)
-        if stats_res is None: return {"Hata": "Veri yapısı uygun değil"}
         
-        methodology_text = get_methodology_explanation(logs, stats_res)
+        # Tüm testleri çalıştır
+        all_results = run_all_tests(df)
         
-        # Grafik
+        # AI yorumu al
+        ai_interpretation = get_ai_interpretation(all_results)
+        
+        # Grafikler
+        img_files = []
+        
+        # Grafik 1: Boxplot (grup varsa gruplu)
         plt.figure(figsize=(10, 6))
         sns.set_theme(style="whitegrid")
         if 'grup' in df.columns and 'on_test' in df.columns:
             df_long = pd.melt(df, id_vars=['grup'], value_vars=['on_test', 'son_test'], var_name='zaman', value_name='puan')
-            sns.pointplot(data=df_long, x='zaman', y='puan', hue='grup')
+            sns.boxplot(data=df_long, x='zaman', y='puan', hue='grup', palette='Set2')
+            plt.title('Gruplara Gore On-Test ve Son-Test Dagilimi')
         elif 'on_test' in df.columns:
             df_long = pd.melt(df, value_vars=['on_test', 'son_test'], var_name='zaman', value_name='puan')
-            sns.boxplot(data=df_long, x='zaman', y='puan')
+            sns.boxplot(data=df_long, x='zaman', y='puan', palette='Set2')
+            plt.title('On-Test ve Son-Test Dagilimi')
+        img1 = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        plt.savefig(img1.name, bbox_inches='tight', dpi=100); plt.close()
+        img_files.append(img1.name)
         
-        img_temp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        plt.savefig(img_temp.name, bbox_inches='tight'); plt.close()
+        # Grafik 2: Line Plot (değişim grafiği)
+        if 'grup' in df.columns and 'on_test' in df.columns:
+            plt.figure(figsize=(10, 6))
+            df_long = pd.melt(df, id_vars=['grup'], value_vars=['on_test', 'son_test'], var_name='zaman', value_name='puan')
+            sns.pointplot(data=df_long, x='zaman', y='puan', hue='grup', markers=['o', 's'], linestyles=['-', '--'])
+            plt.title('Gruplarin Zaman Icerisindeki Degisimi')
+            img2 = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            plt.savefig(img2.name, bbox_inches='tight', dpi=100); plt.close()
+            img_files.append(img2.name)
         
-        # PDF
+        # PDF OLUŞTUR
         pdf = PDFReport()
         pdf.add_page()
-        pdf.chapter_title("1. Bulgular")
-        pdf.chapter_body(f"Test: {stats_res['test']}\nP-Degeri: {round(stats_res['p'], 5)}")
-        pdf.chapter_title("2. Akademik Yorum (AI)")
-        pdf.set_fill_color(240, 240, 240); pdf.multi_cell(0, 6, tr_fix(methodology_text), fill=True); pdf.ln()
-        pdf.chapter_title("3. Gorsel")
-        pdf.image(img_temp.name, w=160)
+        
+        # 1. Tanımlayıcı İstatistikler
+        pdf.chapter_title("1. Tanimlayici Istatistikler")
+        if "tanimlayici" in all_results:
+            for col, vals in all_results["tanimlayici"].items():
+                text = f"{col}: N={vals['N']}, Ort={vals['Ortalama']}, SS={vals['Std Sapma']}, Min={vals['Min']}, Max={vals['Max']}"
+                pdf.chapter_body(text)
+        
+        # 2. Normallik Testleri
+        pdf.chapter_title("2. Normallik Testleri (Shapiro-Wilk)")
+        if "normallik" in all_results:
+            for col, vals in all_results["normallik"].items():
+                text = f"{col}: W={vals['Shapiro-W']}, p={vals['p']} -> {vals['Normal']}"
+                pdf.chapter_body(text)
+        
+        # 3. Paired T-Test
+        if "paired_ttest" in all_results:
+            pdf.chapter_title("3. Eslestirilmis T-Testi (Paired T-Test)")
+            r = all_results["paired_ttest"]
+            pdf.chapter_body(f"t={r['T']}, p={r['p']}, Cohen's d={r['Cohen-d']}\nSonuc: {r['Sonuc']}")
+        
+        # 4. Wilcoxon Testi
+        if "wilcoxon" in all_results:
+            pdf.chapter_title("4. Wilcoxon Testi (Non-Parametrik)")
+            r = all_results["wilcoxon"]
+            pdf.chapter_body(f"W={r['W']}, p={r['p']}\nSonuc: {r['Sonuc']}")
+        
+        # 5. Bağımsız T-Testler
+        ind_tests = [k for k in all_results.keys() if k.startswith("independent_ttest")]
+        if ind_tests:
+            pdf.chapter_title("5. Bagimsiz Orneklem T-Testleri")
+            for test_key in ind_tests:
+                r = all_results[test_key]
+                pdf.chapter_body(f"{r['Degisken']} ({r['Gruplar']}): t={r['T']}, p={r['p']}, d={r['Cohen-d']} -> {r['Sonuc']}")
+        
+        # 6. Mixed ANOVA
+        if "mixed_anova" in all_results:
+            pdf.chapter_title("6. Karma Desen ANOVA (Mixed ANOVA)")
+            r = all_results["mixed_anova"]
+            pdf.chapter_body(f"Zaman Etkisi: F={r['Zaman_F']}, p={r['Zaman_p']}")
+            pdf.chapter_body(f"Grup Etkisi: F={r['Grup_F']}, p={r['Grup_p']}")
+            pdf.chapter_body(f"Etkilesim: F={r['Etkilesim_F']}, p={r['Etkilesim_p']}")
+        
+        # 7. AI Yorumu
+        pdf.add_page()
+        pdf.chapter_title("7. Yapay Zeka Yorumu")
+        pdf.set_fill_color(240, 240, 240)
+        pdf.multi_cell(0, 6, tr_fix(ai_interpretation), fill=True)
+        pdf.ln()
+        
+        # 8. Görseller
+        pdf.add_page()
+        pdf.chapter_title("8. Gorseller")
+        for img_path in img_files:
+            pdf.image(img_path, w=160)
+            pdf.ln(5)
         
         pdf_bytes = bytes(pdf.output())
-        img_temp.close(); os.unlink(img_temp.name)
-        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=akilli_rapor.pdf"})
+        
+        # Temizlik
+        for img_path in img_files:
+            try: os.unlink(img_path)
+            except: pass
+        
+        return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": "inline; filename=kapsamli_analiz_raporu.pdf"})
     except Exception as e: return {"Sistem Hatası": str(e)}
 
 @app.get("/demo/smart-test")
