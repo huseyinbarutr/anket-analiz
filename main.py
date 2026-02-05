@@ -276,7 +276,7 @@ Her test için ayrı ayrı yorum yap ve sonuçların ne anlama geldiğini açık
 Sonuçlar: {all_results}
 Lütfen 3-4 paragraf halinde kapsamlı bir yorum yaz."""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
