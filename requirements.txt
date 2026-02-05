@@ -8,5 +8,8 @@ seaborn
 scipy
 pingouin
 fpdf2
+Pillow
+fonttools
+defusedxml
 google-generativeai
 python-dotenv
