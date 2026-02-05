@@ -276,10 +276,14 @@ Her test için ayrı ayrı yorum yap ve sonuçların ne anlama geldiğini açık
 Sonuçlar: {all_results}
 Lütfen 3-4 paragraf halinde kapsamlı bir yorum yaz."""
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         return response.text
-    except Exception as e: return f"AI Hatasi: {e}"
+    except Exception as e:
+        error_str = str(e).lower()
+        if "429" in str(e) or "quota" in error_str or "exceeded" in error_str:
+            return "Yapay Zeka API kotasi doldu. Lutfen birkaç dakika bekleyip tekrar deneyin veya API anahtarinizi yükseltin."
+        return f"AI Hatasi: {e}"
 
 @app.post("/analyze/smart-auto")
 async def smart_auto_analysis(file: UploadFile = File(...)):
