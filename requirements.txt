@@ -7,6 +7,6 @@ matplotlib
 seaborn
 scipy
 pingouin
-fpdf
+fpdf2
 google-generativeai
 python-dotenv
