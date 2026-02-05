@@ -25,8 +25,8 @@ app = FastAPI(title="Ultimate İstatistik Sistemi (Full + FailSafe)", docs_url="
 # ==========================================================
 GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
 
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+if GOOGLE_KEY:
+    genai.configure(api_key=GOOGLE_KEY)
 
 # ==========================================================
 # 🎨 TASARIM: MODERN ARAYÜZ (HTML)
@@ -264,7 +264,7 @@ def decide_and_analyze(df):
     return None, ["Veri yapisi Smart Auto icin uygun degil. Lutfen Manuel Testleri kullanin."]
 
 def get_methodology_explanation(logs, stats_res):
-    if not os.getenv("GEMINI_API_KEY"):
+    if not os.getenv("GOOGLE_API_KEY"):
         return "Yapay Zeka Anahtari girilmedigi icin otomatik yorum yapilamadi."
     prompt = f"Sen bir istatistikçisin. Analiz Logları: {logs}. Sonuç: {stats_res}. Buna göre 1 paragraf akademik yorum yaz."
     try:
