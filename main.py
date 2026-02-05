@@ -13,21 +13,23 @@ import seaborn as sns
 from fpdf import FPDF
 import tempfile
 import os
-import openai 
+import google.generativeai as genai
+import os
+from dotenv import load_dotenv
+
+# .env dosyasını yükle
+load_dotenv()
 
 app = FastAPI(title="Ultimate İstatistik Sistemi (Full + FailSafe)")
 
 # ==========================================================
-# 🔑 API ANAHTARI (Hatalı olsa bile sistem çalışır)
+# 🔑 GEMINI API AYARLARI
 # ==========================================================
-API_KEY = "sk-proj-..." # Kendi kodun buraya
+GEMINI_KEY = os.getenv("AIzaSyDWhaJaJJ0a_pYBlYCtfT7lqpzotJ2Yffo")
+
+if GEMINI_KEY:
+    genai.configure(api_key=AIzaSyDWhaJaJJ0a_pYBlYCtfT7lqpzotJ2Yffo)
 # ==========================================================
-
-try:
-    client = openai.OpenAI(api_key=API_KEY)
-except:
-    client = None
-
 # --- YARDIMCI: Karakter Düzeltici ---
 def tr_fix(text):
     if not isinstance(text, str): return str(text)
@@ -119,22 +121,106 @@ def decide_and_analyze(df):
 
     return {"p": p_val, "test": test_name}, logs
 
-# --- HATA KORUMALI YORUMCU ---
+# --- HATA KORUMALI YORUMCU (PROFESYONEL İSTATİSTİKÇİ) ---
 def get_methodology_explanation(logs, stats_res):
-    prompt = f"Loglar: {logs}. Sonuc: {stats_res}. Akademik yorumla."
-    # AI Denemesi
-    if client:
-        try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-            )
-            return response.choices[0].message.content
-        except: pass 
+    # Eğer Anahtar yoksa boşuna hata verme, manuel yaz
+    if not os.getenv("GEMINI_API_KEY"):
+        return "Yapay Zeka Anahtari girilmedigi icin otomatik yorum yapilamadi."
+
+    prompt = f"""
+    Sen uzman bir istatistikçisin. Bir öğrencinin tez projesi için analiz yapıyorsun.
+    Aşağıdaki analiz sonuçlarına bakarak, teze konulacak formatta akademik bir yorum paragrafı yaz.
     
-    # Manuel Mod (Yedek)
-    fallback = "OTOMATIK SISTEM RAPORU (Manuel Mod):\n\n"
-    for item in logs: fallback += f"- {item}\n"
-    fallback += f"\nSONUC: {stats_res['test']} (p={round(stats_res['p'], 5)})"
+    Yapılan İşlemler: {logs}
+    İstatistiksel Sonuç: {stats_res}
+    
+    Lütfen sadece sonucu yorumla, başlık atma.
+    """
+
+    try:
+        # Gemini 1.5 Flash (En hızlı ve ücretsiz model)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Yapay zeka yorumu alinirken hata olustu: {str(e)}"varsa)
+    extra_stats = ""
+    if df is not None:
+        try:
+            if 'on_test' in df.columns and 'son_test' in df.columns:
+                on_mean = df['on_test'].mean()
+                son_mean = df['son_test'].mean()
+                on_std = df['on_test'].std()
+                son_std = df['son_test'].std()
+                n = len(df)
+                diff = son_mean - on_mean
+                extra_stats = f"""
+Orneklem Buyuklugu: n = {n}
+On-test Ortalamasi: {on_mean:.2f} (SS = {on_std:.2f})
+Son-test Ortalamasi: {son_mean:.2f} (SS = {son_std:.2f})
+Ortalama Farki: {diff:.2f}
+"""
+        except:
+            pass
+    
+    # Detaylı prompt hazırla
+    prompt = f"""Sen uzman bir istatistikçi ve araştırma metodolojisti olarak çalışıyorsun. 
+    
+Aşağıdaki istatistiksel analiz sonuçlarını akademik ve profesyonel bir dille yorumla. 
+Yorumun şunları içermeli:
+
+1. **Test Seçimi Gerekçesi**: Neden bu testin seçildiğini açıkla
+2. **Sonuçların Yorumu**: p değerinin ne anlama geldiğini, alpha=0.05 eşik değerine göre değerlendir
+3. **Pratik Anlam**: Bulgularının pratikte ne anlama geldiğini açıkla
+4. **Sınırlılıklar**: Varsa dikkat edilmesi gereken noktaları belirt
+
+ANALIZ VERİLERİ:
+- Kullanilan Test: {test_name}
+- P-Degeri: {p_value:.5f}
+- Anlamlilik Durumu: {significance} (alpha = {alpha})
+- Analiz Adimlari: {logs}
+{extra_stats}
+
+Lütfen yanıtını Türkçe olarak yaz ve akademik bir raporda kullanılabilecek düzeyde profesyonel bir dil kullan.
+Yanıtın 200-300 kelime civarında olsun."""
+
+    # AI Denemesi (Gemini)
+    if GEMINI_KEY:
+        try:
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(
+                f"Sen uzman bir istatistikçi ve veri analistisin. Akademik araştırma sonuçlarını profesyonel ve anlaşılır bir şekilde yorumluyorsun.\n\n{prompt}"
+            )
+            return response.text
+        except Exception as e:
+            print(f"AI Hatasi: {e}")
+    
+    # Manuel Mod (Yedek) - Daha detaylı
+    fallback = "═" * 50 + "\n"
+    fallback += "    OTOMATIK ISTATISTIK RAPORU\n"
+    fallback += "═" * 50 + "\n\n"
+    
+    fallback += "📊 ANALIZ SURECI:\n"
+    for i, item in enumerate(logs, 1): 
+        fallback += f"   {i}. {item}\n"
+    
+    fallback += f"\n📈 SONUCLAR:\n"
+    fallback += f"   • Uygulanan Test: {test_name}\n"
+    fallback += f"   • P-Degeri: {p_value:.5f}\n"
+    fallback += f"   • Alpha Esik Degeri: 0.05\n"
+    
+    fallback += f"\n📝 YORUM:\n"
+    if p_value < 0.05:
+        fallback += f"   Elde edilen p degeri (p = {p_value:.5f}), belirlenen anlamlilik\n"
+        fallback += f"   duzeyinden (α = 0.05) kucuk oldugu icin sonuclar istatistiksel\n"
+        fallback += f"   olarak ANLAMLI bulunmustur. Bu durum, gozlenen farkin rastlantisal\n"
+        fallback += f"   degil, gercek bir etkiyi yansittigini gostermektedir.\n"
+    else:
+        fallback += f"   Elde edilen p degeri (p = {p_value:.5f}), belirlenen anlamlilik\n"
+        fallback += f"   duzeyinden (α = 0.05) buyuk oldugu icin sonuclar istatistiksel\n"
+        fallback += f"   olarak ANLAMLI DEGILDIR. Gozlenen fark rastlantisal olabilir.\n"
+    
+    fallback += "\n" + "═" * 50
     return fallback
 
 # ==========================================
@@ -215,8 +301,8 @@ async def smart_auto_analysis(file: UploadFile = File(...)):
         stats_res, logs = decide_and_analyze(df)
         if stats_res is None: return {"Hata": "Veri uygun degil"}
         
-        # Hata korumalı metin
-        methodology_text = get_methodology_explanation(logs, stats_res)
+        # Hata korumalı metin (AI ile profesyonel istatistikçi yorumu)
+        methodology_text = get_methodology_explanation(logs, stats_res, df)
 
         # Grafik
         plt.figure(figsize=(10, 6))

@@ -22,11 +22,12 @@ kiwisolver==1.4.9
 mangum==0.21.0
 matplotlib==3.10.8
 numpy==2.4.2
-openai==2.16.0
+google-generativeai
 openpyxl==3.1.5
 packaging==26.0
 pandas==3.0.0
 pandas-flavor==0.8.1
+python-dotenv==1.0.1
 patsy==1.0.2
 pillow==12.1.0
 pingouin==0.5.5
