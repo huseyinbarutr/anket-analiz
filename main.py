@@ -1,4 +1,3 @@
-```python
 import matplotlib
 matplotlib.use('Agg') # Grafik donmasını önler
 
