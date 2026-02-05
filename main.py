@@ -23,10 +23,10 @@ app = FastAPI(title="Ultimate İstatistik Sistemi (Full + FailSafe)", docs_url="
 # ==========================================================
 # 🔑 GEMINI API AYARLARI
 # ==========================================================
-GEMINI_KEY = os.getenv("AIzaSyDWhaJaJJ0a_pYBlYCtfT7lqpzotJ2Yffo")
+GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
 
-if GEMINI_KEY:
-    genai.configure(api_key=AIzaSyDWhaJaJJ0a_pYBlYCtfT7lqpzotJ2Yffo)
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 # ==========================================================
 # 🎨 TASARIM: MODERN ARAYÜZ (HTML)
