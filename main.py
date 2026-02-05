@@ -208,7 +208,7 @@ def get_methodology_explanation(logs, stats_res):
         return "Yapay Zeka Anahtari girilmedigi icin otomatik yorum yapilamadi."
     prompt = f"Sen bir istatistikçisin. Analiz Logları: {logs}. Sonuç: {stats_res}. Buna göre 1 paragraf akademik yorum yaz."
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         response = model.generate_content(prompt)
         return response.text
     except Exception as e: return f"AI Hatasi: {e}"
